@@ -1,0 +1,214 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+
+# Define possible natural structures
+NATURAL_STRUCTURES = [
+    "Honeycomb",
+    "Truss",
+    "Lattice",
+    "Voronoi Pattern",
+    "Tubular Structure",
+    "Foam Structure",
+    "Hierarchical Layering",
+    "Bi-directional Fiber Pattern",
+    "Catenary Arch",
+    "Pneumatic Structure",
+    "Spiral Shell",
+    "Helical Fiber",
+    "Branching Network",
+    "Geodesic Dome",
+    "Fractal Structure"
+]
+
+# Dataset parameters
+input_dim = 5  # Material properties: strength, weight, flexibility, sustainability, recyclability
+output_dim = len(NATURAL_STRUCTURES)  # Number of natural structures
+latent_dim = 10  # Size of random noise vector for generator
+num_samples = 1000  # Number of training samples
+
+# Generate synthetic dataset
+np.random.seed(42)
+X_train = []
+y_train = []
+
+for _ in range(num_samples):
+    strength = np.random.uniform(0, 10)
+    weight = np.random.uniform(0, 10)
+    flexibility = np.random.uniform(0, 10)
+    sustainability = np.random.uniform(0, 10)
+    recyclability = np.random.uniform(0, 10)
+
+    # Assign labels based on synthetic rules
+    if strength > 8 and weight < 4:
+        label = 8  # Catenary Arch
+    elif flexibility > 8 and recyclability > 7:
+        label = 3  # Voronoi Pattern
+    elif weight > 7 and strength > 8:
+        label = 4  # Tubular Structure
+    elif sustainability > 9:
+        label = 6  # Hierarchical Layering
+    elif strength > 7 and weight < 5:
+        label = 0  # Honeycomb
+    elif flexibility > 7 and strength < 5:
+        label = 1  # Truss
+    elif weight > 8 and sustainability > 8:
+        label = 2  # Lattice
+    elif flexibility > 6 and weight < 4:
+        label = 9  # Pneumatic Structure
+    elif recyclability > 9 and flexibility < 4:
+        label = 5  # Foam Structure
+    elif strength > 6 and flexibility > 8:
+        label = 7  # Bi-directional Fiber Pattern
+    elif weight < 3 and strength > 9:
+        label = 10  # Spiral Shell
+    elif flexibility > 9 and weight < 5:
+        label = 11  # Helical Fiber
+    elif recyclability > 8 and sustainability > 7:
+        label = 12  # Branching Network
+    elif strength > 7 and weight > 7 and flexibility > 5:
+        label = 13  # Geodesic Dome
+    else:
+        label = 14  # Fractal Structure (default)
+
+    X_train.append([strength, weight, flexibility, sustainability, recyclability])
+    y_train.append(label)
+
+X_train = np.array(X_train)
+y_train = np.array(y_train)
+
+# Normalize input data to range [0, 1]
+X_train = X_train / 10.0
+
+# Convert dataset to PyTorch tensors
+X_train = torch.tensor(X_train, dtype=torch.float32)
+y_train = torch.tensor(y_train, dtype=torch.long)
+
+# GAN components: Generator and Discriminator
+class Generator(nn.Module):
+    def __init__(self, latent_dim, input_dim):
+        super(Generator, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(latent_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Linear(256, input_dim),
+            nn.Sigmoid()  # Output values between 0 and 1
+        )
+
+    def forward(self, z):
+        return self.model(z)
+
+class Discriminator(nn.Module):
+    def __init__(self, input_dim):
+        super(Discriminator, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(input_dim, 256),
+            nn.LeakyReLU(0.2),
+            nn.Linear(256, 128),
+            nn.LeakyReLU(0.2),
+            nn.Linear(128, 1),
+            nn.Sigmoid()  # Output a probability (real or fake)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+# Initialize generator and discriminator
+generator = Generator(latent_dim, input_dim)
+discriminator = Discriminator(input_dim)
+
+# Loss function and optimizers
+criterion = nn.BCELoss()
+optimizer_G = optim.Adam(generator.parameters(), lr=0.0002)
+optimizer_D = optim.Adam(discriminator.parameters(), lr=0.0002)
+
+# Training loop
+num_epochs = 5000
+batch_size = 64
+
+for epoch in range(num_epochs):
+    # Train discriminator
+    real_samples = X_train[torch.randint(0, X_train.size(0), (batch_size,))]
+    real_labels = torch.ones((batch_size, 1))
+    fake_labels = torch.zeros((batch_size, 1))
+
+    # Generate fake samples
+    z = torch.randn((batch_size, latent_dim))
+    fake_samples = generator(z)
+
+    # Discriminator loss
+    real_loss = criterion(discriminator(real_samples), real_labels)
+    fake_loss = criterion(discriminator(fake_samples.detach()), fake_labels)
+    loss_D = real_loss + fake_loss
+
+    optimizer_D.zero_grad()
+    loss_D.backward()
+    optimizer_D.step()
+
+    # Train generator
+    fake_labels = torch.ones((batch_size, 1))  # Generator wants to trick discriminator
+    loss_G = criterion(discriminator(fake_samples), fake_labels)
+
+    optimizer_G.zero_grad()
+    loss_G.backward()
+    optimizer_G.step()
+
+    # Calculate discriminator accuracy
+    real_correct = (discriminator(real_samples).round() == real_labels).sum().item()
+    fake_correct = (discriminator(fake_samples.detach()).round() == fake_labels).sum().item()
+    accuracy_D = (real_correct + fake_correct) / (2 * batch_size) * 100
+
+    # Print losses and accuracy occasionally
+    if epoch % 500 == 0:
+        print(f"Epoch {epoch}/{num_epochs} | Loss_D: {loss_D.item():.4f} | Loss_G: {loss_G.item():.4f} | Discriminator Accuracy: {accuracy_D:.2f}%")
+
+# Function to classify generated designs into structures
+def classify_design(design):
+    strength, weight, flexibility, sustainability, recyclability = design
+    if strength > 8 and weight < 4:
+        return "Catenary Arch"
+    elif flexibility > 8 and recyclability > 7:
+        return "Voronoi Pattern"
+    elif weight > 7 and strength > 8:
+        return "Tubular Structure"
+    elif sustainability > 9:
+        return "Hierarchical Layering"
+    elif strength > 7 and weight < 5:
+        return "Honeycomb"
+    elif flexibility > 7 and strength < 5:
+        return "Truss"
+    elif weight > 8 and sustainability > 8:
+        return "Lattice"
+    elif flexibility > 6 and weight < 4:
+        return "Pneumatic Structure"
+    elif recyclability > 9 and flexibility < 4:
+        return "Foam Structure"
+    elif strength > 6 and flexibility > 8:
+        return "Bi-directional Fiber Pattern"
+    elif weight < 3 and strength > 9:
+        return "Spiral Shell"
+    elif flexibility > 9 and weight < 5:
+        return "Helical Fiber"
+    elif recyclability > 8 and sustainability > 7:
+        return "Branching Network"
+    elif strength > 7 and weight > 7 and flexibility > 5:
+        return "Geodesic Dome"
+    else:
+        return "Fractal Structure"  # Default when no condition matches
+
+# Generate a new design and classify it
+z = torch.randn((100, latent_dim))  # Random noise vectors
+generated_designs = generator(z).detach().numpy() * 10  # Scale back to range [0, 10]
+
+# Calculate fitness score for generated samples
+valid_designs = 0
+for design in generated_designs:
+    structure = classify_design(design)
+    if structure != "Fractal Structure":  # Exclude "Fractal Structure" (default)
+        valid_designs += 1
+
+fitness_score = (valid_designs / len(generated_designs)) * 100
+print(f"Fitness Score of Generated Designs: {fitness_score:.2f}%")
